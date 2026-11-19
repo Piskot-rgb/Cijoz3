@@ -1,0 +1,2246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+  />
+  <meta name="theme-color" content="#0d1017" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <title>Octo Pop — 8×8 Block Puzzle</title>
+  <style>
+    /* ==========================================================================
+       1. BASE RESET & FULL-VIEWPORT 100dvh LOCK
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background-color: #0d1017;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      touch-action: none;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .mono-num {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: max(12px, env(safe-area-inset-top));
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      padding-left: max(14px, env(safe-area-inset-left));
+      padding-right: max(14px, env(safe-area-inset-right));
+      background: radial-gradient(circle at 50% 14%, #181e2d 0%, #0d1017 72%);
+    }
+
+    /* ==========================================================================
+       2. UNOBTRUSIVE TOP GAME HUD
+       ========================================================================== */
+    .hud-header {
+      width: 100%;
+      max-width: 540px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 4px 0;
+      z-index: 20;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      pointer-events: auto;
+    }
+
+    .brand-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #f1f5f9;
+      white-space: nowrap;
+    }
+
+    .score-cluster {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .score-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .score-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: #94a3b8;
+      line-height: 1;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .score-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .score-value {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f8fafc;
+      line-height: 1;
+    }
+
+    .score-value.best {
+      color: #fde68a;
+    }
+
+    .combo-tag {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #fcd34d;
+      line-height: 1;
+      display: none;
+    }
+
+    .score-divider {
+      width: 1px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      pointer-events: auto;
+    }
+
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: #151a26;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.15s ease;
+    }
+
+    .icon-btn:hover {
+      background: #1e2536;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.91);
+    }
+
+    .icon-btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px #22d3ee;
+    }
+
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* ==========================================================================
+       3. FULL-AREA 60FPS CANVAS CONTAINER
+       ========================================================================== */
+    .canvas-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /* ==========================================================================
+       4. GAME SHELL OVERLAYS (TITLE, PAUSE, RESTART, GAME OVER)
+       ========================================================================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 12, 18, 0.82);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      padding-top: max(20px, env(safe-area-inset-top));
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+      z-index: 40;
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+    }
+
+    .modal-backdrop.top-layer {
+      z-index: 50;
+    }
+
+    .modal-card {
+      width: 100%;
+      max-width: 360px;
+      background: #141925;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 24px;
+      padding: 28px 26px;
+      text-align: center;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.65);
+    }
+
+    .modal-card.compact {
+      max-width: 320px;
+    }
+
+    .title-logo-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 18px;
+    }
+
+    .title-heading {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .modal-title {
+      font-size: 1.55rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .modal-subtitle {
+      font-size: 0.92rem;
+      color: #cbd5e1;
+      line-height: 1.5;
+      margin-bottom: 22px;
+    }
+
+    .modal-subtitle.muted {
+      color: #94a3b8;
+    }
+
+    .title-best-row {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 0.9rem;
+      color: #94a3b8;
+      margin-bottom: 22px;
+    }
+
+    .title-best-row.visible {
+      display: flex;
+    }
+
+    .title-best-row strong {
+      color: #fde68a;
+    }
+
+    .new-best-line {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #fcd34d;
+      margin-bottom: 8px;
+    }
+
+    .new-best-line.visible {
+      display: inline-flex;
+    }
+
+    .modal-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .stat-box {
+      background: #0e121c;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 16px;
+      padding: 12px 10px;
+    }
+
+    .stat-box-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .stat-box-val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .stat-box-val.gold {
+      color: #fcd34d;
+    }
+
+    .meta-summary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-bottom: 22px;
+    }
+
+    .meta-summary strong {
+      color: #e2e8f0;
+    }
+
+    .stack-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 14px 20px;
+      border: none;
+      border-radius: 13px;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #090d16;
+      background: linear-gradient(90deg, #22d3ee 0%, #34d399 100%);
+      cursor: pointer;
+      transition: transform 0.14s ease, filter 0.15s ease;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.06);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px #67e8f9;
+    }
+
+    .btn-secondary {
+      width: 100%;
+      padding: 12px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 13px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      transition: transform 0.14s ease, background-color 0.15s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-secondary:active {
+      transform: scale(0.97);
+    }
+
+    .btn-ghost {
+      width: 100%;
+      padding: 12px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 13px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      background: transparent;
+      cursor: pointer;
+      transition: transform 0.14s ease, background-color 0.15s ease;
+    }
+
+    .btn-ghost:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .control-hint {
+      margin-top: 18px;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      letter-spacing: -0.01em;
+    }
+
+    @media (max-width: 390px) {
+      .brand-title { font-size: 1.05rem; }
+      .score-cluster { gap: 12px; }
+      .score-value { font-size: 1.08rem; }
+      .icon-btn { width: 40px; height: 40px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Top HUD -->
+    <header class="hud-header">
+      <div class="brand">
+        <svg width="34" height="34" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <rect x="1" y="1" width="34" height="34" rx="10" fill="#151a26" stroke="rgba(255,255,255,0.1)" />
+          <rect x="6" y="6" width="10.5" height="10.5" rx="3" fill="url(#jCyan)" />
+          <rect x="19.5" y="6" width="10.5" height="10.5" rx="3" fill="url(#jViolet)" />
+          <rect x="6" y="19.5" width="10.5" height="10.5" rx="3" fill="url(#jCoral)" />
+          <rect x="19.5" y="19.5" width="10.5" height="10.5" rx="3" fill="url(#jEmerald)" />
+          <defs>
+            <linearGradient id="jCyan" x1="6" y1="6" x2="16.5" y2="16.5" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#38bdf8" /><stop offset="1" stop-color="#0891b2" />
+            </linearGradient>
+            <linearGradient id="jViolet" x1="19.5" y1="6" x2="30" y2="16.5" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#c4b5fd" /><stop offset="1" stop-color="#7c3aed" />
+            </linearGradient>
+            <linearGradient id="jCoral" x1="6" y1="19.5" x2="16.5" y2="30" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#fb7185" /><stop offset="1" stop-color="#e11d48" />
+            </linearGradient>
+            <linearGradient id="jEmerald" x1="19.5" y1="19.5" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#4ade80" /><stop offset="1" stop-color="#059669" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="brand-title">Octo Pop</span>
+      </div>
+
+      <div class="score-cluster">
+        <div class="score-item">
+          <span class="score-label">Score</span>
+          <div class="score-row">
+            <span id="scoreDisplay" class="score-value mono-num">0</span>
+            <span id="comboTag" class="combo-tag mono-num"></span>
+          </div>
+        </div>
+        <div class="score-divider" aria-hidden="true"></div>
+        <div class="score-item">
+          <span class="score-label">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="#fbbf24" aria-hidden="true">
+              <path d="M3 18h18v2H3v-2zm0-11l5 4 4-6 4 6 5-4-2 9H5L3 7z" />
+            </svg>
+            Best
+          </span>
+          <span id="bestDisplay" class="score-value best mono-num">0</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="muteBtn" type="button" class="icon-btn" aria-label="Toggle Sound" title="Toggle Sound">
+          <svg id="iconSoundOn" viewBox="0 0 24 24">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          </svg>
+          <svg id="iconSoundOff" class="hidden" viewBox="0 0 24 24">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="23" y1="9" x2="17" y2="15"></line>
+            <line x1="17" y1="9" x2="23" y2="15"></line>
+          </svg>
+        </button>
+        <button id="pauseBtn" type="button" class="icon-btn hidden" aria-label="Pause Game" title="Pause Game">
+          <svg viewBox="0 0 24 24">
+            <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+            <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+          </svg>
+        </button>
+        <button id="restartBtn" type="button" class="icon-btn hidden" aria-label="Restart Game" title="Restart Game">
+          <svg viewBox="0 0 24 24">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Isolated 60fps Canvas Container -->
+    <main class="canvas-container" id="canvasContainer">
+      <canvas id="gameCanvas"></canvas>
+    </main>
+
+    <!-- Title Screen Overlay -->
+    <div id="titleModal" class="modal-backdrop active" role="dialog" aria-modal="true" aria-labelledby="titleHeading">
+      <div class="modal-card">
+        <div class="title-logo-wrap">
+          <svg width="64" height="64" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+            <rect x="1" y="1" width="34" height="34" rx="10" fill="#151a26" stroke="rgba(255,255,255,0.12)" />
+            <rect x="6" y="6" width="10.5" height="10.5" rx="3" fill="url(#jCyan)" />
+            <rect x="19.5" y="6" width="10.5" height="10.5" rx="3" fill="url(#jViolet)" />
+            <rect x="6" y="19.5" width="10.5" height="10.5" rx="3" fill="url(#jCoral)" />
+            <rect x="19.5" y="19.5" width="10.5" height="10.5" rx="3" fill="url(#jEmerald)" />
+          </svg>
+        </div>
+        <h1 id="titleHeading" class="title-heading">Octo Pop</h1>
+        <p class="modal-subtitle">
+          Place jewel blocks onto the 8×8 grid. Complete full rows or columns to clear lines and chain combos.
+        </p>
+        <div id="titleBestRow" class="title-best-row">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#fbbf24" aria-hidden="true">
+            <path d="M3 18h18v2H3v-2zm0-11l5 4 4-6 4 6 5-4-2 9H5L3 7z" />
+          </svg>
+          <span>Best Score</span>
+          <strong id="titleBestVal" class="mono-num">0</strong>
+        </div>
+        <div id="titleActions" class="stack-actions">
+          <button id="continueBtn" type="button" class="btn-primary hidden">Continue Game</button>
+          <button id="startNewBtn" type="button" class="btn-primary">Start Game</button>
+        </div>
+        <p class="control-hint">Drag &amp; drop pieces · Keys 1–3, Arrows &amp; Space · Esc Pause</p>
+      </div>
+    </div>
+
+    <!-- Pause Modal -->
+    <div id="pauseModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+      <div class="modal-card compact">
+        <h2 id="pauseTitle" class="modal-title">Paused</h2>
+        <p class="modal-subtitle muted">
+          Score <strong id="pauseScoreVal" class="mono-num" style="color:#e2e8f0">0</strong> · Lines
+          <strong id="pauseLinesVal" class="mono-num" style="color:#e2e8f0">0</strong>
+        </p>
+        <div class="stack-actions">
+          <button id="resumeBtn" type="button" class="btn-primary">Resume</button>
+          <button id="pauseMuteBtn" type="button" class="btn-secondary">Sound: On</button>
+          <button id="pauseRestartBtn" type="button" class="btn-ghost">Restart Game</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="gameOverModal" class="modal-backdrop top-layer" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
+      <div class="modal-card">
+        <div id="newBestLine" class="new-best-line">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#fbbf24" aria-hidden="true">
+            <path d="M3 18h18v2H3v-2zm0-11l5 4 4-6 4 6 5-4-2 9H5L3 7z" />
+          </svg>
+          New High Score
+        </div>
+        <h2 id="gameOverTitle" class="modal-title">No Moves Left</h2>
+        <p id="gameOverSubtitle" class="modal-subtitle muted">Great run. Ready for another round?</p>
+        <div class="modal-stats">
+          <div class="stat-box">
+            <div class="stat-box-label">Final Score</div>
+            <div id="finalScoreVal" class="stat-box-val mono-num">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-label">Best Score</div>
+            <div id="finalBestVal" class="stat-box-val gold mono-num">0</div>
+          </div>
+        </div>
+        <div class="meta-summary">
+          <span>Lines cleared <strong id="finalLinesVal" class="mono-num">0</strong></span>
+          <span aria-hidden="true">·</span>
+          <span>Peak combo <strong id="finalComboVal" class="mono-num">—</strong></span>
+        </div>
+        <button id="playAgainBtn" type="button" class="btn-primary">Play Again</button>
+      </div>
+    </div>
+
+    <!-- Restart Confirmation Modal -->
+    <div id="restartModal" class="modal-backdrop top-layer" role="dialog" aria-modal="true" aria-labelledby="restartTitle">
+      <div class="modal-card compact">
+        <h2 id="restartTitle" class="modal-title" style="font-size:1.3rem">Start a New Game?</h2>
+        <p class="modal-subtitle muted">Your current board will reset while your Best Score stays saved.</p>
+        <div class="row-actions">
+          <button id="cancelRestartBtn" type="button" class="btn-secondary">Cancel</button>
+          <button id="confirmRestartBtn" type="button" class="btn-primary">Restart</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      /* ========================================================================
+         1. CONSTANTS, JEWEL PALETTES & PIECE CATALOG
+         ======================================================================== */
+      const GRID_SIZE = 8;
+      const STORAGE_KEY = 'octopop_state_v1';
+      const PARTICLE_POOL_SIZE = 180;
+
+      const PALETTES = [
+        { name: 'cyan',    top: '#38bdf8', main: '#06b6d4', bottom: '#0e7490', rim: 'rgba(186, 230, 253, 0.55)', glow: 'rgba(34, 211, 238, 0.5)' },
+        { name: 'emerald', top: '#4ade80', main: '#10b981', bottom: '#047857', rim: 'rgba(187, 247, 208, 0.55)', glow: 'rgba(52, 211, 153, 0.5)' },
+        { name: 'amber',   top: '#fcd34d', main: '#f59e0b', bottom: '#b45309', rim: 'rgba(254, 243, 199, 0.60)', glow: 'rgba(251, 191, 36, 0.5)' },
+        { name: 'coral',   top: '#fb7185', main: '#f43f5e', bottom: '#be123c', rim: 'rgba(254, 205, 211, 0.55)', glow: 'rgba(251, 113, 133, 0.5)' },
+        { name: 'violet',  top: '#c4b5fd', main: '#8b5cf6', bottom: '#6d28d9', rim: 'rgba(237, 233, 254, 0.55)', glow: 'rgba(167, 139, 250, 0.5)' },
+        { name: 'sky',     top: '#93c5fd', main: '#3b82f6', bottom: '#1d4ed8', rim: 'rgba(219, 234, 254, 0.55)', glow: 'rgba(96, 165, 250, 0.5)' }
+      ];
+
+      const SHAPES = [
+        { matrix: [[1]], weight: 4 },
+        { matrix: [[1, 1]], weight: 7 },
+        { matrix: [[1], [1]], weight: 7 },
+        { matrix: [[1, 1, 1]], weight: 8 },
+        { matrix: [[1], [1], [1]], weight: 8 },
+        { matrix: [[1, 1, 1, 1]], weight: 6 },
+        { matrix: [[1], [1], [1], [1]], weight: 6 },
+        { matrix: [[1, 1, 1, 1, 1]], weight: 3 },
+        { matrix: [[1], [1], [1], [1], [1]], weight: 3 },
+        { matrix: [[1, 1], [1, 1]], weight: 9 },
+        { matrix: [[1, 1, 1], [1, 1, 1]], weight: 4 },
+        { matrix: [[1, 1], [1, 1], [1, 1]], weight: 4 },
+        { matrix: [[1, 1, 1], [1, 1, 1], [1, 1, 1]], weight: 2 },
+        { matrix: [[1, 0], [1, 1]], weight: 6 },
+        { matrix: [[0, 1], [1, 1]], weight: 6 },
+        { matrix: [[1, 1], [1, 0]], weight: 6 },
+        { matrix: [[1, 1], [0, 1]], weight: 6 },
+        { matrix: [[1, 0], [1, 0], [1, 1]], weight: 5 },
+        { matrix: [[0, 1], [0, 1], [1, 1]], weight: 5 },
+        { matrix: [[1, 1], [1, 0], [1, 0]], weight: 5 },
+        { matrix: [[1, 1], [0, 1], [0, 1]], weight: 5 },
+        { matrix: [[1, 1, 1], [1, 0, 0]], weight: 5 },
+        { matrix: [[1, 1, 1], [0, 0, 1]], weight: 5 },
+        { matrix: [[1, 0, 0], [1, 1, 1]], weight: 5 },
+        { matrix: [[0, 0, 1], [1, 1, 1]], weight: 5 },
+        { matrix: [[1, 0, 0], [1, 0, 0], [1, 1, 1]], weight: 3 },
+        { matrix: [[0, 0, 1], [0, 0, 1], [1, 1, 1]], weight: 3 },
+        { matrix: [[1, 1, 1], [1, 0, 0], [1, 0, 0]], weight: 3 },
+        { matrix: [[1, 1, 1], [0, 0, 1], [0, 0, 1]], weight: 3 },
+        { matrix: [[1, 1, 1], [0, 1, 0]], weight: 5 },
+        { matrix: [[0, 1, 0], [1, 1, 1]], weight: 5 },
+        { matrix: [[1, 0], [1, 1], [1, 0]], weight: 5 },
+        { matrix: [[0, 1], [1, 1], [0, 1]], weight: 5 },
+        { matrix: [[1, 1, 0], [0, 1, 1]], weight: 4 },
+        { matrix: [[0, 1, 1], [1, 1, 0]], weight: 4 },
+        { matrix: [[0, 1], [1, 1], [1, 0]], weight: 4 },
+        { matrix: [[1, 0], [1, 1], [0, 1]], weight: 4 }
+      ];
+
+      /* ========================================================================
+         2. PROCEDURAL WEB AUDIO SYNTHESIZER (UNLOCKED ON FIRST TOUCH)
+         ======================================================================== */
+      class SoundEngine {
+        constructor() {
+          this.ctx = null;
+          this.muted = false;
+        }
+        unlock() {
+          if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              try {
+                this.ctx = new AudioCtx();
+              } catch {}
+            }
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+          }
+        }
+        setMuted(muted) { this.muted = Boolean(muted); }
+        isMuted() { return this.muted; }
+
+        playPickup() {
+          if (this.muted) return;
+          this.unlock();
+          const ctx = this.ctx;
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(320, now);
+          osc.frequency.exponentialRampToValueAtTime(590, now + 0.055);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.13, now + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.07);
+        }
+
+        playPlace(blockCount = 3) {
+          if (this.muted) return;
+          this.unlock();
+          const ctx = this.ctx;
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const baseFreq = Math.max(145, 235 - blockCount * 8);
+
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(baseFreq * 1.4, now);
+          osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.65, now + 0.075);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.2, now + 0.008);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.09);
+
+          const clickOsc = ctx.createOscillator();
+          const clickGain = ctx.createGain();
+          clickOsc.type = 'sine';
+          clickOsc.frequency.setValueAtTime(860, now);
+          clickOsc.frequency.exponentialRampToValueAtTime(420, now + 0.032);
+          clickGain.gain.setValueAtTime(0.001, now);
+          clickGain.gain.linearRampToValueAtTime(0.09, now + 0.004);
+          clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.038);
+          clickOsc.connect(clickGain);
+          clickGain.connect(ctx.destination);
+          clickOsc.start(now);
+          clickOsc.stop(now + 0.045);
+        }
+
+        playClear(linesCount, combo) {
+          if (this.muted) return;
+          this.unlock();
+          const ctx = this.ctx;
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const baseNotes = [523.25, 659.25, 783.99, 1046.5, 1318.51];
+          const pitchBoost = Math.pow(1.06, Math.min(combo - 1, 8));
+          const noteCount = Math.min(baseNotes.length, 2 + linesCount);
+
+          for (let i = 0; i < noteCount; i++) {
+            const start = now + i * 0.048;
+            const freq = baseNotes[i] * pitchBoost;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = i === noteCount - 1 ? 'triangle' : 'sine';
+            osc.frequency.setValueAtTime(freq, start);
+            osc.frequency.exponentialRampToValueAtTime(freq * 1.015, start + 0.18);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.linearRampToValueAtTime(0.14, start + 0.014);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.26);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.28);
+          }
+
+          if (linesCount >= 2) {
+            const sub = ctx.createOscillator();
+            const subGain = ctx.createGain();
+            sub.type = 'sine';
+            sub.frequency.setValueAtTime(140, now);
+            sub.frequency.exponentialRampToValueAtTime(52, now + 0.18);
+            subGain.gain.setValueAtTime(0.001, now);
+            subGain.gain.linearRampToValueAtTime(0.18, now + 0.012);
+            subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            sub.connect(subGain);
+            subGain.connect(ctx.destination);
+            sub.start(now);
+            sub.stop(now + 0.22);
+          }
+        }
+
+        playDeal() {
+          if (this.muted) return;
+          this.unlock();
+          const ctx = this.ctx;
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          for (let i = 0; i < 3; i++) {
+            const start = now + i * 0.045;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(420 + i * 70, start);
+            osc.frequency.exponentialRampToValueAtTime(560 + i * 80, start + 0.035);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.linearRampToValueAtTime(0.06, start + 0.008);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.045);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.05);
+          }
+        }
+
+        playReturn() {
+          if (this.muted) return;
+          this.unlock();
+          const ctx = this.ctx;
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(280, now);
+          osc.frequency.exponentialRampToValueAtTime(190, now + 0.05);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.07, now + 0.008);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.065);
+        }
+
+        playGameOver() {
+          if (this.muted) return;
+          this.unlock();
+          const ctx = this.ctx;
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          const notes = [392.0, 349.23, 311.13, 261.63];
+          notes.forEach((freq, idx) => {
+            const start = now + idx * 0.095;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, start);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.96, start + 0.25);
+            gain.gain.setValueAtTime(0.001, start);
+            gain.gain.linearRampToValueAtTime(0.11, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(start);
+            osc.stop(start + 0.32);
+          });
+        }
+      }
+
+      /* ========================================================================
+         3. PURE 8x8 PUZZLE LOGIC & SMART-DEAL GENERATOR
+         ======================================================================== */
+      let nextPieceUid = 1;
+
+      function createEmptyGrid() {
+        return Array.from({ length: GRID_SIZE }, () =>
+          Array.from({ length: GRID_SIZE }, () => null)
+        );
+      }
+
+      function createShowcaseGrid() {
+        const grid = createEmptyGrid();
+        const pattern = [
+          [1, 1, 0], [1, 2, 0], [2, 1, 0],
+          [1, 5, 4], [1, 6, 4], [2, 6, 4],
+          [3, 3, 2], [3, 4, 2], [4, 3, 2], [4, 4, 2],
+          [5, 1, 1], [6, 1, 1], [6, 2, 1], [6, 3, 1],
+          [5, 5, 3], [5, 6, 3], [6, 5, 3]
+        ];
+        for (const [r, c, p] of pattern) {
+          grid[r][c] = { paletteIndex: p, scale: 1, velScale: 0, flash: 0 };
+        }
+        return grid;
+      }
+
+      function countMatrixBlocks(matrix) {
+        let count = 0;
+        for (let r = 0; r < matrix.length; r++) {
+          for (let c = 0; c < matrix[r].length; c++) {
+            if (matrix[r][c]) count++;
+          }
+        }
+        return count;
+      }
+
+      function canPlacePiece(grid, matrix, startRow, startCol) {
+        const rows = matrix.length;
+        const cols = matrix[0].length;
+        if (startRow < 0 || startCol < 0 || startRow + rows > GRID_SIZE || startCol + cols > GRID_SIZE) {
+          return false;
+        }
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (matrix[r][c] && grid[startRow + r][startCol + c] !== null) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+
+      function canPlacePieceAnywhere(grid, matrix) {
+        const rows = matrix.length;
+        const cols = matrix[0].length;
+        for (let r = 0; r <= GRID_SIZE - rows; r++) {
+          for (let c = 0; c <= GRID_SIZE - cols; c++) {
+            if (canPlacePiece(grid, matrix, r, c)) return true;
+          }
+        }
+        return false;
+      }
+
+      function hasAnyValidMove(grid, tray) {
+        for (let i = 0; i < tray.length; i++) {
+          const piece = tray[i];
+          if (piece && !piece.used && canPlacePieceAnywhere(grid, piece.matrix)) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function pickWeightedShape(candidates) {
+        let total = 0;
+        for (let i = 0; i < candidates.length; i++) total += candidates[i].weight;
+        let roll = Math.random() * total;
+        for (let i = 0; i < candidates.length; i++) {
+          roll -= candidates[i].weight;
+          if (roll <= 0) return candidates[i];
+        }
+        return candidates[candidates.length - 1];
+      }
+
+      function makeTrayPiece(shape, paletteIndex, initialScale) {
+        return {
+          id: nextPieceUid++,
+          matrix: shape.matrix.map((row) => [...row]),
+          paletteIndex,
+          blockCount: countMatrixBlocks(shape.matrix),
+          used: false,
+          scale: initialScale,
+          velScale: 0
+        };
+      }
+
+      function smartDealTray(grid) {
+        const playableShapes = SHAPES.filter((s) => canPlacePieceAnywhere(grid, s.matrix));
+        const usedPalettes = new Set();
+
+        const pickPalette = () => {
+          const avail = [];
+          for (let i = 0; i < PALETTES.length; i++) {
+            if (!usedPalettes.has(i)) avail.push(i);
+          }
+          const pool = avail.length > 0 ? avail : PALETTES.map((_, i) => i);
+          const chosen = pool[Math.floor(Math.random() * pool.length)];
+          usedPalettes.add(chosen);
+          return chosen;
+        };
+
+        const pieces = [];
+        for (let i = 0; i < 3; i++) {
+          pieces.push(makeTrayPiece(pickWeightedShape(SHAPES), pickPalette(), 0.2 + i * 0.04));
+        }
+
+        if (playableShapes.length > 0 && !hasAnyValidMove(grid, pieces)) {
+          const slot = Math.floor(Math.random() * 3);
+          pieces[slot] = makeTrayPiece(
+            pickWeightedShape(playableShapes),
+            pieces[slot].paletteIndex,
+            0.2 + slot * 0.04
+          );
+        }
+        return pieces;
+      }
+
+      function findCompletedLines(grid) {
+        const rows = [];
+        const cols = [];
+        for (let r = 0; r < GRID_SIZE; r++) {
+          let full = true;
+          for (let c = 0; c < GRID_SIZE; c++) {
+            if (grid[r][c] === null) { full = false; break; }
+          }
+          if (full) rows.push(r);
+        }
+        for (let c = 0; c < GRID_SIZE; c++) {
+          let full = true;
+          for (let r = 0; r < GRID_SIZE; r++) {
+            if (grid[r][c] === null) { full = false; break; }
+          }
+          if (full) cols.push(c);
+        }
+        return { rows, cols };
+      }
+
+      function previewCompletedLines(grid, matrix, startRow, startCol) {
+        const rowsToCheck = new Set();
+        const colsToCheck = new Set();
+        const pRows = matrix.length;
+        const pCols = matrix[0].length;
+
+        for (let r = 0; r < pRows; r++) {
+          for (let c = 0; c < pCols; c++) {
+            if (matrix[r][c]) {
+              rowsToCheck.add(startRow + r);
+              colsToCheck.add(startCol + c);
+            }
+          }
+        }
+
+        const completedRows = [];
+        const completedCols = [];
+
+        rowsToCheck.forEach((r) => {
+          let full = true;
+          for (let c = 0; c < GRID_SIZE; c++) {
+            const inPiece = r >= startRow && r < startRow + pRows && c >= startCol && c < startCol + pCols && matrix[r - startRow][c - startCol] === 1;
+            if (!inPiece && grid[r][c] === null) { full = false; break; }
+          }
+          if (full) completedRows.push(r);
+        });
+
+        colsToCheck.forEach((c) => {
+          let full = true;
+          for (let r = 0; r < GRID_SIZE; r++) {
+            const inPiece = r >= startRow && r < startRow + pRows && c >= startCol && c < startCol + pCols && matrix[r - startRow][c - startCol] === 1;
+            if (!inPiece && grid[r][c] === null) { full = false; break; }
+          }
+          if (full) completedCols.push(c);
+        });
+
+        return { rows: completedRows, cols: completedCols };
+      }
+
+      function calculateScore(placedBlocks, linesCount, combo) {
+        let points = placedBlocks * 10;
+        if (linesCount > 0) {
+          const lineBase = ((linesCount * (linesCount + 1)) / 2) * 100;
+          const comboMult = 1 + (combo - 1) * 0.5;
+          points += Math.round(lineBase * comboMult);
+        }
+        return points;
+      }
+
+      /* ========================================================================
+         4. 60FPS HIGH-DPI CANVAS ENGINE & UI BINDINGS
+         ======================================================================== */
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d', { alpha: true });
+      const sound = new SoundEngine();
+
+      // Unlock Web Audio immediately on first touch / pointer interaction anywhere
+      function unlockAudioOnce() {
+        sound.unlock();
+        window.removeEventListener('touchstart', unlockAudioOnce, true);
+        window.removeEventListener('pointerdown', unlockAudioOnce, true);
+      }
+      window.addEventListener('touchstart', unlockAudioOnce, { capture: true, passive: true });
+      window.addEventListener('pointerdown', unlockAudioOnce, { capture: true, passive: true });
+
+      const scoreDisplay = document.getElementById('scoreDisplay');
+      const bestDisplay = document.getElementById('bestDisplay');
+      const comboTag = document.getElementById('comboTag');
+      const muteBtn = document.getElementById('muteBtn');
+      const iconSoundOn = document.getElementById('iconSoundOn');
+      const iconSoundOff = document.getElementById('iconSoundOff');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const restartBtn = document.getElementById('restartBtn');
+
+      const titleModal = document.getElementById('titleModal');
+      const titleBestRow = document.getElementById('titleBestRow');
+      const titleBestVal = document.getElementById('titleBestVal');
+      const continueBtn = document.getElementById('continueBtn');
+      const startNewBtn = document.getElementById('startNewBtn');
+
+      const pauseModal = document.getElementById('pauseModal');
+      const pauseScoreVal = document.getElementById('pauseScoreVal');
+      const pauseLinesVal = document.getElementById('pauseLinesVal');
+      const resumeBtn = document.getElementById('resumeBtn');
+      const pauseMuteBtn = document.getElementById('pauseMuteBtn');
+      const pauseRestartBtn = document.getElementById('pauseRestartBtn');
+
+      const gameOverModal = document.getElementById('gameOverModal');
+      const newBestLine = document.getElementById('newBestLine');
+      const gameOverSubtitle = document.getElementById('gameOverSubtitle');
+      const finalScoreVal = document.getElementById('finalScoreVal');
+      const finalBestVal = document.getElementById('finalBestVal');
+      const finalLinesVal = document.getElementById('finalLinesVal');
+      const finalComboVal = document.getElementById('finalComboVal');
+      const playAgainBtn = document.getElementById('playAgainBtn');
+
+      const restartModal = document.getElementById('restartModal');
+      const cancelRestartBtn = document.getElementById('cancelRestartBtn');
+      const confirmRestartBtn = document.getElementById('confirmRestartBtn');
+
+      let phase = 'TITLE_MENU';
+      let grid = createShowcaseGrid();
+      let tray = [null, null, null];
+      let score = 0;
+      let bestScore = 0;
+      let combo = 0;
+      let peakCombo = 0;
+      let linesCleared = 0;
+      let isNewBest = false;
+      let hasSavedRun = false;
+      let confirmRestartOpen = false;
+
+      let layout = {
+        width: 400, height: 600, boardX: 20, boardY: 20, boardSize: 360,
+        boardPad: 10, cellSize: 40, cellGap: 3, trayY: 400, trayH: 130, slotCenters: []
+      };
+
+      let drag = null;
+      let snapBack = null;
+      let keyboardSlot = null;
+      let keyboardCursor = { row: 3, col: 3 };
+
+      const particles = Array.from({ length: PARTICLE_POOL_SIZE }, () => ({
+        active: false, x: 0, y: 0, vx: 0, vy: 0, size: 6,
+        color: '#38bdf8', highlight: '#fff', alpha: 1, life: 0, maxLife: 0.5, rot: 0, vRot: 0
+      }));
+      let callouts = [];
+      let sweeps = [];
+      let shakeTimer = 0;
+      let shakeIntensity = 0;
+      let hitstopTimer = 0;
+
+      /* ------------------------------------------------------------------------
+         STORAGE & UI SYNC (WRAPPED IN TRY/CATCH FOR WEBVIEW SAFETY)
+         ------------------------------------------------------------------------ */
+      function loadFromStorage() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.bestScore === 'number' && parsed.bestScore >= 0) bestScore = parsed.bestScore;
+          if (typeof parsed.muted === 'boolean') sound.setMuted(parsed.muted);
+          if (parsed.hasActiveGame && Array.isArray(parsed.grid) && parsed.grid.length === GRID_SIZE) {
+            hasSavedRun = true;
+          }
+        } catch {}
+      }
+
+      function restoreSavedBoard() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return false;
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed.grid) || parsed.grid.length !== GRID_SIZE) return false;
+
+          const nextGrid = createEmptyGrid();
+          for (let r = 0; r < GRID_SIZE; r++) {
+            for (let c = 0; c < GRID_SIZE; c++) {
+              const val = parsed.grid[r] && parsed.grid[r][c];
+              if (typeof val === 'number' && val >= 0 && val < PALETTES.length) {
+                nextGrid[r][c] = { paletteIndex: val, scale: 1, velScale: 0, flash: 0 };
+              }
+            }
+          }
+          grid = nextGrid;
+          score = typeof parsed.score === 'number' ? parsed.score : 0;
+          bestScore = typeof parsed.bestScore === 'number' ? parsed.bestScore : bestScore;
+          combo = typeof parsed.combo === 'number' ? parsed.combo : 0;
+          peakCombo = typeof parsed.peakCombo === 'number' ? parsed.peakCombo : 0;
+          linesCleared = typeof parsed.linesCleared === 'number' ? parsed.linesCleared : 0;
+          isNewBest = false;
+
+          if (Array.isArray(parsed.tray) && parsed.tray.length === 3) {
+            tray = parsed.tray.map((item) => {
+              if (!item || item.used) return null;
+              return {
+                id: nextPieceUid++,
+                matrix: item.matrix,
+                paletteIndex: item.paletteIndex % PALETTES.length,
+                blockCount: countMatrixBlocks(item.matrix),
+                used: false,
+                scale: 1,
+                velScale: 0
+              };
+            });
+          }
+          if (tray.every((p) => p === null || p.used)) {
+            tray = smartDealTray(grid);
+          }
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function saveToStorage() {
+        try {
+          const compactGrid = grid.map((row) => row.map((cell) => (cell ? cell.paletteIndex : null)));
+          const compactTray = tray.map((p) =>
+            p && !p.used ? { matrix: p.matrix, paletteIndex: p.paletteIndex, used: false } : null
+          );
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            grid: compactGrid,
+            tray: compactTray,
+            score,
+            bestScore,
+            combo,
+            peakCombo,
+            linesCleared,
+            muted: sound.isMuted(),
+            hasActiveGame: phase === 'PLAYING' || phase === 'PAUSED'
+          }));
+        } catch {}
+      }
+
+      function syncUI() {
+        scoreDisplay.textContent = score.toLocaleString();
+        bestDisplay.textContent = bestScore.toLocaleString();
+
+        if (combo >= 2) {
+          comboTag.textContent = `×${combo}`;
+          comboTag.style.display = 'inline';
+        } else {
+          comboTag.style.display = 'none';
+        }
+
+        const muted = sound.isMuted();
+        iconSoundOn.classList.toggle('hidden', muted);
+        iconSoundOff.classList.toggle('hidden', !muted);
+        pauseMuteBtn.textContent = `Sound: ${muted ? 'Off' : 'On'}`;
+
+        const inPlayOrPaused = phase === 'PLAYING' || phase === 'PAUSED';
+        pauseBtn.classList.toggle('hidden', !inPlayOrPaused);
+        restartBtn.classList.toggle('hidden', !inPlayOrPaused);
+
+        titleModal.classList.toggle('active', phase === 'TITLE_MENU');
+        titleBestRow.classList.toggle('visible', bestScore > 0);
+        titleBestVal.textContent = bestScore.toLocaleString();
+        if (hasSavedRun) {
+          continueBtn.classList.remove('hidden');
+          startNewBtn.className = 'btn-secondary';
+          startNewBtn.textContent = 'New Game';
+        } else {
+          continueBtn.classList.add('hidden');
+          startNewBtn.className = 'btn-primary';
+          startNewBtn.textContent = 'Start Game';
+        }
+
+        pauseModal.classList.toggle('active', phase === 'PAUSED' && !confirmRestartOpen);
+        pauseScoreVal.textContent = score.toLocaleString();
+        pauseLinesVal.textContent = String(linesCleared);
+
+        gameOverModal.classList.toggle('active', phase === 'GAME_OVER');
+        newBestLine.classList.toggle('visible', isNewBest);
+        gameOverSubtitle.textContent = isNewBest
+          ? 'You set a new personal record.'
+          : 'Great run. Ready for another round?';
+        finalScoreVal.textContent = score.toLocaleString();
+        finalBestVal.textContent = bestScore.toLocaleString();
+        finalLinesVal.textContent = String(linesCleared);
+        finalComboVal.textContent = peakCombo > 0 ? `×${peakCombo}` : '—';
+
+        restartModal.classList.toggle('active', confirmRestartOpen);
+      }
+
+      /* ------------------------------------------------------------------------
+         GAME FLOW CONTROLS
+         ------------------------------------------------------------------------ */
+      function startNewGame() {
+        sound.unlock();
+        confirmRestartOpen = false;
+        grid = createEmptyGrid();
+        score = 0;
+        combo = 0;
+        peakCombo = 0;
+        linesCleared = 0;
+        isNewBest = false;
+        hasSavedRun = true;
+        drag = null;
+        snapBack = null;
+        keyboardSlot = null;
+        callouts = [];
+        sweeps = [];
+        tray = smartDealTray(grid);
+        phase = 'PLAYING';
+        sound.playDeal();
+        saveToStorage();
+        syncUI();
+      }
+
+      function continueSavedGame() {
+        sound.unlock();
+        if (!hasSavedRun || !restoreSavedBoard()) {
+          startNewGame();
+          return;
+        }
+        phase = hasAnyValidMove(grid, tray) ? 'PLAYING' : 'GAME_OVER';
+        syncUI();
+      }
+
+      function pauseGame() {
+        if (phase === 'PLAYING') {
+          drag = null;
+          phase = 'PAUSED';
+          syncUI();
+        }
+      }
+
+      function resumeGame() {
+        if (phase === 'PAUSED') {
+          sound.unlock();
+          phase = 'PLAYING';
+          syncUI();
+        }
+      }
+
+      function toggleMute() {
+        const next = !sound.isMuted();
+        sound.setMuted(next);
+        if (!next) {
+          sound.unlock();
+          sound.playPickup();
+        }
+        saveToStorage();
+        syncUI();
+      }
+
+      /* ------------------------------------------------------------------------
+         CANVAS MEASUREMENT & HIGH-DPI SCALING
+         ------------------------------------------------------------------------ */
+      function measure() {
+        const parent = canvas.parentElement;
+        if (!parent) return;
+        const rect = parent.getBoundingClientRect();
+        const width = Math.max(280, Math.floor(rect.width));
+        const height = Math.max(360, Math.floor(rect.height));
+        const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const sideMargin = Math.max(12, Math.min(28, width * 0.04));
+        const topMargin = 8;
+        const bottomMargin = 10;
+        const gapBetween = Math.max(12, Math.min(24, height * 0.025));
+
+        const maxTrayH = Math.min(148, Math.max(96, height * 0.23));
+        const availBoardH = height - topMargin - bottomMargin - gapBetween - maxTrayH;
+        const availBoardW = width - sideMargin * 2;
+        const boardSize = Math.floor(Math.min(availBoardW, availBoardH, 500));
+
+        const boardPad = Math.max(8, Math.round(boardSize * 0.024));
+        const cellGap = Math.max(3, Math.round(boardSize * 0.009));
+        const innerSize = boardSize - boardPad * 2;
+        const cellSize = (innerSize - cellGap * (GRID_SIZE - 1)) / GRID_SIZE;
+
+        const totalStackH = boardSize + gapBetween + maxTrayH;
+        const startY = Math.max(topMargin, Math.floor((height - totalStackH) * 0.45));
+        const boardX = Math.floor((width - boardSize) / 2);
+        const boardY = startY;
+
+        const trayY = boardY + boardSize + gapBetween;
+        const trayH = Math.min(maxTrayH, height - trayY - bottomMargin);
+        const trayW = Math.min(width - sideMargin * 2, boardSize + 24);
+        const trayX = Math.floor((width - trayW) / 2);
+        const slotW = trayW / 3;
+        const miniCell = Math.min(cellSize * 0.56, Math.min(slotW - 14, trayH - 12) / 5.2);
+
+        const slotCenters = [0, 1, 2].map((i) => ({
+          x: trayX + slotW * i + slotW / 2,
+          y: trayY + trayH / 2,
+          w: slotW,
+          h: trayH,
+          miniCell
+        }));
+
+        layout = {
+          width, height, boardX, boardY, boardSize, boardPad, cellSize, cellGap, trayY, trayH, slotCenters
+        };
+      }
+
+      /* ------------------------------------------------------------------------
+         DRAG-AND-DROP & KEYBOARD PLACEMENT
+         ------------------------------------------------------------------------ */
+      function toCanvasCoords(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: clientX - rect.left, y: clientY - rect.top };
+      }
+
+      function getDraggedPieceTopLeftAndSize(d) {
+        const slot = layout.slotCenters[d.slotIndex];
+        const startCell = slot ? slot.miniCell : layout.cellSize * 0.55;
+        const targetCell = layout.cellSize;
+        const t = Math.min(1, d.liftProgress);
+        const ease = 1 - Math.pow(1 - t, 3);
+        const cellSize = startCell + (targetCell - startCell) * ease;
+        const touchLift = d.pointerType === 'touch' ? layout.cellSize * 1.45 : layout.cellSize * 0.45;
+        const pRows = d.piece.matrix.length;
+        const pCols = d.piece.matrix[0].length;
+        const totalW = pCols * cellSize + (pCols - 1) * layout.cellGap;
+        const totalH = pRows * cellSize + (pRows - 1) * layout.cellGap;
+        return {
+          x: d.pointerX - totalW / 2,
+          y: d.pointerY - touchLift * ease - totalH / 2,
+          cellSize
+        };
+      }
+
+      function updateDragHover() {
+        if (!drag) return;
+        const { x, y, cellSize } = getDraggedPieceTopLeftAndSize(drag);
+        const step = layout.cellSize + layout.cellGap;
+        const firstCenterX = x + cellSize / 2;
+        const firstCenterY = y + cellSize / 2;
+        const originX = layout.boardX + layout.boardPad + layout.cellSize / 2;
+        const originY = layout.boardY + layout.boardPad + layout.cellSize / 2;
+
+        const col = Math.round((firstCenterX - originX) / step);
+        const row = Math.round((firstCenterY - originY) / step);
+        const pRows = drag.piece.matrix.length;
+        const pCols = drag.piece.matrix[0].length;
+
+        const tolerance = layout.cellSize * 0.9;
+        const snappedX = originX + col * step;
+        const snappedY = originY + row * step;
+        const withinSnap = Math.abs(firstCenterX - snappedX) <= tolerance && Math.abs(firstCenterY - snappedY) <= tolerance;
+
+        if (
+          withinSnap &&
+          row >= 0 && col >= 0 &&
+          row + pRows <= GRID_SIZE && col + pCols <= GRID_SIZE &&
+          canPlacePiece(grid, drag.piece.matrix, row, col)
+        ) {
+          drag.hoverRow = row;
+          drag.hoverCol = col;
+          drag.isValidHover = true;
+          const prev = previewCompletedLines(grid, drag.piece.matrix, row, col);
+          drag.previewRows = prev.rows;
+          drag.previewCols = prev.cols;
+        } else {
+          drag.hoverRow = null;
+          drag.hoverCol = null;
+          drag.isValidHover = false;
+          drag.previewRows = [];
+          drag.previewCols = [];
+        }
+      }
+
+      function cancelDragWithSnapBack() {
+        if (!drag) return;
+        const { x, y, cellSize } = getDraggedPieceTopLeftAndSize(drag);
+        const pRows = drag.piece.matrix.length;
+        const pCols = drag.piece.matrix[0].length;
+        snapBack = {
+          piece: drag.piece,
+          slotIndex: drag.slotIndex,
+          startX: x + (pCols * cellSize + (pCols - 1) * layout.cellGap) / 2,
+          startY: y + (pRows * cellSize + (pRows - 1) * layout.cellGap) / 2,
+          startCellSize: cellSize,
+          progress: 0
+        };
+        drag = null;
+        sound.playReturn();
+      }
+
+      function getGridCellAt(canvasX, canvasY, matrix) {
+        const step = layout.cellSize + layout.cellGap;
+        const pRows = matrix.length;
+        const pCols = matrix[0].length;
+        const topLeftX = canvasX - ((pCols - 1) * step) / 2;
+        const topLeftY = canvasY - ((pRows - 1) * step) / 2;
+        const col = Math.round((topLeftX - (layout.boardX + layout.boardPad + layout.cellSize / 2)) / step);
+        const row = Math.round((topLeftY - (layout.boardY + layout.boardPad + layout.cellSize / 2)) / step);
+        if (row < 0 || col < 0 || row + pRows > GRID_SIZE || col + pCols > GRID_SIZE) return null;
+        return { row, col };
+      }
+
+      function centerKeyboardCursorForPiece(piece) {
+        const maxR = GRID_SIZE - piece.matrix.length;
+        const maxC = GRID_SIZE - piece.matrix[0].length;
+        keyboardCursor.row = Math.min(maxR, Math.max(0, keyboardCursor.row));
+        keyboardCursor.col = Math.min(maxC, Math.max(0, keyboardCursor.col));
+      }
+
+      /* ------------------------------------------------------------------------
+         COMMIT PLACEMENT, LINE CLEARS, COMBO & PARTICLES
+         ------------------------------------------------------------------------ */
+      function getCellRect(row, col) {
+        return {
+          x: layout.boardX + layout.boardPad + col * (layout.cellSize + layout.cellGap),
+          y: layout.boardY + layout.boardPad + row * (layout.cellSize + layout.cellGap),
+          size: layout.cellSize
+        };
+      }
+
+      function spawnBurst(x, y, color, highlight, count) {
+        let spawned = 0;
+        for (let i = 0; i < particles.length && spawned < count; i++) {
+          const p = particles[i];
+          if (p.active) continue;
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 75 + Math.random() * 190;
+          p.active = true;
+          p.x = x + (Math.random() - 0.5) * 10;
+          p.y = y + (Math.random() - 0.5) * 10;
+          p.vx = Math.cos(angle) * speed;
+          p.vy = Math.sin(angle) * speed - 40;
+          p.size = 5 + Math.random() * 6;
+          p.color = color;
+          p.highlight = highlight;
+          p.alpha = 1;
+          p.life = 0;
+          p.maxLife = 0.36 + Math.random() * 0.28;
+          p.rot = Math.random() * Math.PI * 2;
+          p.vRot = (Math.random() - 0.5) * 10;
+          spawned++;
+        }
+      }
+
+      function addScore(points) {
+        score += points;
+        if (score > bestScore) {
+          bestScore = score;
+          isNewBest = true;
+        }
+      }
+
+      function commitPlacement(piece, slotIndex, startRow, startCol) {
+        piece.used = true;
+        tray[slotIndex] = null;
+
+        for (let r = 0; r < piece.matrix.length; r++) {
+          for (let c = 0; c < piece.matrix[r].length; c++) {
+            if (piece.matrix[r][c]) {
+              grid[startRow + r][startCol + c] = {
+                paletteIndex: piece.paletteIndex,
+                scale: 0.72,
+                velScale: 7.5,
+                flash: 1
+              };
+            }
+          }
+        }
+        sound.playPlace(piece.blockCount);
+
+        const { rows, cols } = findCompletedLines(grid);
+        const totalLines = rows.length + cols.length;
+
+        if (totalLines > 0) {
+          combo += 1;
+          if (combo > peakCombo) peakCombo = combo;
+          linesCleared += totalLines;
+          sound.playClear(totalLines, combo);
+
+          hitstopTimer = totalLines >= 2 ? 0.048 : 0.025;
+          shakeTimer = totalLines >= 2 ? 0.24 : 0.14;
+          shakeIntensity = Math.min(10, 3 + totalLines * 2.2);
+
+          const clearedSet = new Set();
+          const piecePal = PALETTES[piece.paletteIndex];
+
+          for (const r of rows) {
+            sweeps.push({ isRow: true, index: r, color: piecePal.top, life: 0, maxLife: 0.34 });
+            for (let c = 0; c < GRID_SIZE; c++) clearedSet.add(`${r},${c}`);
+          }
+          for (const c of cols) {
+            sweeps.push({ isRow: false, index: c, color: piecePal.top, life: 0, maxLife: 0.34 });
+            for (let r = 0; r < GRID_SIZE; r++) clearedSet.add(`${r},${c}`);
+          }
+
+          let sumX = 0, sumY = 0, count = 0;
+          clearedSet.forEach((key) => {
+            const [rStr, cStr] = key.split(',');
+            const r = Number(rStr), c = Number(cStr);
+            const cell = grid[r][c];
+            const pal = cell ? PALETTES[cell.paletteIndex] : piecePal;
+            const pos = getCellRect(r, c);
+            const cx = pos.x + pos.size / 2;
+            const cy = pos.y + pos.size / 2;
+            sumX += cx;
+            sumY += cy;
+            count++;
+            spawnBurst(cx, cy, pal.top, pal.rim, totalLines >= 2 ? 5 : 3);
+            grid[r][c] = null;
+          });
+
+          const earned = calculateScore(piece.blockCount, totalLines, combo);
+          addScore(earned);
+
+          const cx = count > 0 ? sumX / count : layout.boardX + layout.boardSize / 2;
+          const cy = count > 0 ? sumY / count : layout.boardY + layout.boardSize / 2;
+          let sub;
+          if (totalLines >= 3) sub = `${totalLines}x MEGA CLEAR!`;
+          else if (totalLines === 2) sub = 'DOUBLE CLEAR!';
+          else if (combo >= 2) sub = `COMBO ×${combo}`;
+
+          callouts.push({
+            text: `+${earned}`,
+            subText: sub,
+            x: Math.max(layout.boardX + 60, Math.min(layout.boardX + layout.boardSize - 60, cx)),
+            y: cy,
+            vy: -56,
+            color: combo >= 2 || totalLines >= 2 ? '#fcd34d' : '#f8fafc',
+            life: 0,
+            maxLife: 0.95,
+            scale: 1
+          });
+        } else {
+          combo = 0;
+          const earned = calculateScore(piece.blockCount, 0, 0);
+          addScore(earned);
+          const pos = getCellRect(
+            startRow + Math.floor(piece.matrix.length / 2),
+            startCol + Math.floor(piece.matrix[0].length / 2)
+          );
+          callouts.push({
+            text: `+${earned}`,
+            x: pos.x + pos.size / 2,
+            y: pos.y + pos.size / 2,
+            vy: -38,
+            color: '#cbd5e1',
+            life: 0,
+            maxLife: 0.65,
+            scale: 0.9
+          });
+        }
+
+        if (tray.every((p) => p === null || p.used)) {
+          tray = smartDealTray(grid);
+          sound.playDeal();
+        }
+
+        if (!hasAnyValidMove(grid, tray)) {
+          phase = 'GAME_OVER';
+          hasSavedRun = false;
+          sound.playGameOver();
+        }
+
+        saveToStorage();
+        syncUI();
+      }
+
+      /* ------------------------------------------------------------------------
+         60FPS SIMULATION & RENDERING
+         ------------------------------------------------------------------------ */
+      function roundRect(x, y, w, h, r) {
+        const radius = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + w, y, x + w, y + h, radius);
+        ctx.arcTo(x + w, y + h, x, y + h, radius);
+        ctx.arcTo(x, y + h, x, y, radius);
+        ctx.arcTo(x, y, x + w, y, radius);
+        ctx.closePath();
+      }
+
+      function drawJewelBlock(x, y, size, pal, radius, alpha, flash) {
+        if (size <= 2) return;
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+
+        const grad = ctx.createLinearGradient(x, y, x, y + size);
+        grad.addColorStop(0, pal.top);
+        grad.addColorStop(0.48, pal.main);
+        grad.addColorStop(1, pal.bottom);
+        ctx.fillStyle = grad;
+        roundRect(x, y, size, size, radius);
+        ctx.fill();
+
+        const inset = Math.max(1.5, size * 0.08);
+        ctx.fillStyle = pal.rim;
+        roundRect(x + inset, y + inset, size - inset * 2, Math.max(2, size * 0.22), Math.max(2, radius * 0.5));
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+        roundRect(
+          x + inset,
+          y + size - inset - Math.max(2, size * 0.12),
+          size - inset * 2,
+          Math.max(2, size * 0.12),
+          Math.max(1.5, radius * 0.4)
+        );
+        ctx.fill();
+
+        if (flash > 0) {
+          ctx.fillStyle = `rgba(255, 255, 255, ${flash * 0.42})`;
+          roundRect(x, y, size, size, radius);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawPieceCentered(piece, cx, cy, cellSize, alpha) {
+        const gap = Math.max(2, cellSize * 0.1);
+        const pRows = piece.matrix.length;
+        const pCols = piece.matrix[0].length;
+        const totalW = pCols * cellSize + (pCols - 1) * gap;
+        const totalH = pRows * cellSize + (pRows - 1) * gap;
+        const startX = cx - totalW / 2;
+        const startY = cy - totalH / 2;
+        const pal = PALETTES[piece.paletteIndex];
+        const radius = Math.max(3, Math.round(cellSize * 0.2));
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        for (let r = 0; r < pRows; r++) {
+          for (let c = 0; c < pCols; c++) {
+            if (!piece.matrix[r][c]) continue;
+            drawJewelBlock(startX + c * (cellSize + gap), startY + r * (cellSize + gap), cellSize, pal, radius, 1, 0);
+          }
+        }
+        ctx.restore();
+      }
+
+      function drawGhostPiece(matrix, paletteIndex, startRow, startCol, radius, valid) {
+        const pal = PALETTES[paletteIndex];
+        ctx.save();
+        for (let r = 0; r < matrix.length; r++) {
+          for (let c = 0; c < matrix[r].length; c++) {
+            if (!matrix[r][c]) continue;
+            const { x, y, size } = getCellRect(startRow + r, startCol + c);
+            if (valid) {
+              ctx.fillStyle = pal.main;
+              ctx.globalAlpha = 0.34;
+              roundRect(x, y, size, size, radius);
+              ctx.fill();
+              ctx.globalAlpha = 0.85;
+              ctx.strokeStyle = pal.top;
+              ctx.lineWidth = 1.75;
+              roundRect(x + 1, y + 1, size - 2, size - 2, radius);
+              ctx.stroke();
+            } else {
+              ctx.fillStyle = '#ef4444';
+              ctx.globalAlpha = 0.25;
+              roundRect(x, y, size, size, radius);
+              ctx.fill();
+              ctx.globalAlpha = 0.75;
+              ctx.strokeStyle = '#f87171';
+              ctx.lineWidth = 1.5;
+              roundRect(x + 1, y + 1, size - 2, size - 2, radius);
+              ctx.stroke();
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      function update(dt) {
+        if (hitstopTimer > 0) {
+          hitstopTimer = Math.max(0, hitstopTimer - dt);
+          return;
+        }
+        if (shakeTimer > 0) shakeTimer = Math.max(0, shakeTimer - dt);
+
+        const stiffness = 260;
+        const damping = 18;
+        for (let r = 0; r < GRID_SIZE; r++) {
+          for (let c = 0; c < GRID_SIZE; c++) {
+            const cell = grid[r][c];
+            if (!cell) continue;
+            if (Math.abs(1 - cell.scale) > 0.002 || Math.abs(cell.velScale) > 0.01) {
+              const force = (1 - cell.scale) * stiffness;
+              cell.velScale = (cell.velScale + force * dt) * Math.exp(-damping * dt);
+              cell.scale += cell.velScale * dt;
+            } else {
+              cell.scale = 1;
+              cell.velScale = 0;
+            }
+            if (cell.flash > 0) cell.flash = Math.max(0, cell.flash - dt * 4.5);
+          }
+        }
+
+        for (let i = 0; i < 3; i++) {
+          const piece = tray[i];
+          if (!piece || piece.used) continue;
+          if (Math.abs(1 - piece.scale) > 0.002 || Math.abs(piece.velScale) > 0.01) {
+            const force = (1 - piece.scale) * 240;
+            piece.velScale = (piece.velScale + force * dt) * Math.exp(-16 * dt);
+            piece.scale += piece.velScale * dt;
+          } else {
+            piece.scale = 1;
+            piece.velScale = 0;
+          }
+        }
+
+        if (drag && drag.liftProgress < 1) {
+          drag.liftProgress = Math.min(1, drag.liftProgress + dt * 11);
+          updateDragHover();
+        }
+
+        if (snapBack) {
+          snapBack.progress += dt * 7.5;
+          if (snapBack.progress >= 1) snapBack = null;
+        }
+
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          if (!p.active) continue;
+          p.life += dt;
+          if (p.life >= p.maxLife) { p.active = false; continue; }
+          p.vy += 420 * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.rot += p.vRot * dt;
+          p.alpha = 1 - p.life / p.maxLife;
+        }
+
+        for (let i = sweeps.length - 1; i >= 0; i--) {
+          sweeps[i].life += dt;
+          if (sweeps[i].life >= sweeps[i].maxLife) sweeps.splice(i, 1);
+        }
+
+        for (let i = callouts.length - 1; i >= 0; i--) {
+          const c = callouts[i];
+          c.life += dt;
+          c.y += c.vy * dt;
+          c.vy *= Math.exp(-2.8 * dt);
+          if (c.life >= c.maxLife) callouts.splice(i, 1);
+        }
+      }
+
+      function render() {
+        const { width, height, boardX, boardY, boardSize, trayY, trayH, slotCenters } = layout;
+        ctx.clearRect(0, 0, width, height);
+        ctx.save();
+
+        if (shakeTimer > 0) {
+          const mag = shakeIntensity * (shakeTimer / 0.24);
+          ctx.translate((Math.random() - 0.5) * mag * 2, (Math.random() - 0.5) * mag * 2);
+        }
+
+        const boardRadius = Math.max(16, Math.round(boardSize * 0.045));
+        ctx.fillStyle = '#151a26';
+        roundRect(boardX, boardY, boardSize, boardSize, boardRadius);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+        ctx.lineWidth = 1;
+        roundRect(boardX + 0.5, boardY + 0.5, boardSize - 1, boardSize - 1, boardRadius);
+        ctx.stroke();
+
+        let previewRows = [], previewCols = [], previewPalIdx = 0;
+        if (drag && drag.isValidHover) {
+          previewRows = drag.previewRows;
+          previewCols = drag.previewCols;
+          previewPalIdx = drag.piece.paletteIndex;
+        } else if (keyboardSlot !== null && tray[keyboardSlot]) {
+          const kp = tray[keyboardSlot];
+          if (canPlacePiece(grid, kp.matrix, keyboardCursor.row, keyboardCursor.col)) {
+            const prev = previewCompletedLines(grid, kp.matrix, keyboardCursor.row, keyboardCursor.col);
+            previewRows = prev.rows;
+            previewCols = prev.cols;
+            previewPalIdx = kp.paletteIndex;
+          }
+        }
+        const previewRowSet = new Set(previewRows);
+        const previewColSet = new Set(previewCols);
+
+        const cellRadius = Math.max(5, Math.round(layout.cellSize * 0.19));
+        for (let r = 0; r < GRID_SIZE; r++) {
+          for (let c = 0; c < GRID_SIZE; c++) {
+            const { x, y, size } = getCellRect(r, c);
+            const altQuad = ((Math.floor(r / 4) + Math.floor(c / 4)) & 1) === 0;
+            ctx.fillStyle = altQuad ? '#1b2131' : '#181e2c';
+            roundRect(x, y, size, size, cellRadius);
+            ctx.fill();
+
+            const cell = grid[r][c];
+            if (cell) {
+              const isClearing = previewRowSet.has(r) || previewColSet.has(c);
+              const pal = PALETTES[isClearing ? previewPalIdx : cell.paletteIndex];
+              const drawSize = size * cell.scale;
+              const off = (size - drawSize) / 2;
+              drawJewelBlock(x + off, y + off, drawSize, pal, cellRadius, isClearing ? 0.92 : 1, cell.flash);
+              if (isClearing) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.72)';
+                ctx.lineWidth = 1.75;
+                roundRect(x + 1, y + 1, size - 2, size - 2, cellRadius);
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+          }
+        }
+
+        if (drag && drag.isValidHover && drag.hoverRow !== null && drag.hoverCol !== null) {
+          drawGhostPiece(drag.piece.matrix, drag.piece.paletteIndex, drag.hoverRow, drag.hoverCol, cellRadius, true);
+        } else if (phase === 'PLAYING' && keyboardSlot !== null && tray[keyboardSlot]) {
+          const kp = tray[keyboardSlot];
+          const valid = canPlacePiece(grid, kp.matrix, keyboardCursor.row, keyboardCursor.col);
+          drawGhostPiece(kp.matrix, kp.paletteIndex, keyboardCursor.row, keyboardCursor.col, cellRadius, valid);
+        }
+
+        for (const sweep of sweeps) {
+          const t = sweep.life / sweep.maxLife;
+          ctx.save();
+          ctx.globalAlpha = (1 - t) * 0.75;
+          ctx.fillStyle = sweep.color;
+          if (sweep.isRow) {
+            const first = getCellRect(sweep.index, 0);
+            const last = getCellRect(sweep.index, GRID_SIZE - 1);
+            const h = first.size * (1 - t * 0.4);
+            roundRect(first.x, first.y + (first.size - h) / 2, last.x + last.size - first.x, h, cellRadius);
+            ctx.fill();
+          } else {
+            const first = getCellRect(0, sweep.index);
+            const last = getCellRect(GRID_SIZE - 1, sweep.index);
+            const w = first.size * (1 - t * 0.4);
+            roundRect(first.x + (first.size - w) / 2, first.y, w, last.y + last.size - first.y, cellRadius);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
+        if (slotCenters.length === 3) {
+          const dockX = slotCenters[0].x - slotCenters[0].w / 2;
+          const dockW = slotCenters[0].w * 3;
+          ctx.fillStyle = 'rgba(21, 26, 38, 0.78)';
+          roundRect(dockX, trayY, dockW, trayH, 18);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+          ctx.lineWidth = 1;
+          roundRect(dockX + 0.5, trayY + 0.5, dockW - 1, trayH - 1, 18);
+          ctx.stroke();
+
+          for (let i = 0; i < 3; i++) {
+            const slot = slotCenters[i];
+            const piece = tray[i];
+            if (i > 0) {
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+              ctx.beginPath();
+              ctx.moveTo(slot.x - slot.w / 2, trayY + 14);
+              ctx.lineTo(slot.x - slot.w / 2, trayY + trayH - 14);
+              ctx.stroke();
+            }
+            if (keyboardSlot === i && piece && !piece.used) {
+              ctx.strokeStyle = PALETTES[piece.paletteIndex].top;
+              ctx.lineWidth = 1.75;
+              roundRect(slot.x - slot.w / 2 + 6, trayY + 6, slot.w - 12, trayH - 12, 12);
+              ctx.stroke();
+            }
+            if (!piece || piece.used || (drag && drag.slotIndex === i) || (snapBack && snapBack.slotIndex === i)) continue;
+            const playable = canPlacePieceAnywhere(grid, piece.matrix);
+            drawPieceCentered(piece, slot.x, slot.y, slot.miniCell * piece.scale, playable ? 1 : 0.32);
+          }
+        }
+
+        if (snapBack) {
+          const slot = slotCenters[snapBack.slotIndex];
+          if (slot) {
+            const t = 1 - Math.pow(1 - Math.min(1, snapBack.progress), 3);
+            const cx = snapBack.startX + (slot.x - snapBack.startX) * t;
+            const cy = snapBack.startY + (slot.y - snapBack.startY) * t;
+            const cSize = snapBack.startCellSize + (slot.miniCell - snapBack.startCellSize) * t;
+            drawPieceCentered(snapBack.piece, cx, cy, cSize, 1);
+          }
+        }
+
+        if (drag) {
+          const { x, y, cellSize } = getDraggedPieceTopLeftAndSize(drag);
+          const pal = PALETTES[drag.piece.paletteIndex];
+          const dragRadius = Math.max(5, Math.round(cellSize * 0.19));
+          const m = drag.piece.matrix;
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+          ctx.shadowBlur = 20;
+          ctx.shadowOffsetY = 12;
+          for (let r = 0; r < m.length; r++) {
+            for (let c = 0; c < m[r].length; c++) {
+              if (!m[r][c]) continue;
+              drawJewelBlock(x + c * (cellSize + layout.cellGap), y + r * (cellSize + layout.cellGap), cellSize, pal, dragRadius, 1, 0);
+            }
+          }
+          ctx.restore();
+        }
+
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          if (!p.active) continue;
+          ctx.save();
+          ctx.globalAlpha = p.alpha;
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillStyle = p.color;
+          const half = p.size / 2;
+          roundRect(-half, -half, p.size, p.size, 2.5);
+          ctx.fill();
+          ctx.fillStyle = p.highlight;
+          ctx.fillRect(-half + 1, -half + 1, p.size - 2, Math.max(1.5, p.size * 0.25));
+          ctx.restore();
+        }
+
+        for (const c of callouts) {
+          const t = c.life / c.maxLife;
+          const alpha = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+          const popScale = t < 0.2 ? 0.75 + (t / 0.2) * 0.35 : 1.1 - t * 0.1;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, alpha);
+          ctx.translate(c.x, c.y);
+          ctx.scale(popScale * c.scale, popScale * c.scale);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          if (c.subText) {
+            ctx.font = '800 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+            ctx.fillStyle = '#fde68a';
+            ctx.shadowColor = 'rgba(0,0,0,0.65)';
+            ctx.shadowBlur = 8;
+            ctx.fillText(c.subText, 0, -18);
+          }
+          ctx.font = '800 22px ui-monospace, SFMono-Regular, Menlo, monospace';
+          ctx.fillStyle = c.color;
+          ctx.shadowColor = 'rgba(0,0,0,0.7)';
+          ctx.shadowBlur = 10;
+          ctx.fillText(c.text, 0, 0);
+          ctx.restore();
+        }
+
+        ctx.restore();
+      }
+
+      /* ------------------------------------------------------------------------
+         EVENT WIRING & INITIALIZATION
+         ------------------------------------------------------------------------ */
+      canvas.addEventListener('pointerdown', (e) => {
+        if (phase !== 'PLAYING' || drag) return;
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+        sound.unlock();
+        const { x, y } = toCanvasCoords(e.clientX, e.clientY);
+
+        for (let i = 0; i < 3; i++) {
+          const piece = tray[i];
+          const slot = layout.slotCenters[i];
+          if (!piece || piece.used || !slot) continue;
+          const halfW = slot.w * 0.5;
+          const halfH = Math.max(slot.h * 0.54, 48);
+          if (x >= slot.x - halfW && x <= slot.x + halfW && y >= slot.y - halfH && y <= slot.y + halfH) {
+            snapBack = null;
+            keyboardSlot = null;
+            drag = {
+              piece, slotIndex: i, pointerId: e.pointerId, pointerType: e.pointerType,
+              pointerX: x, pointerY: y, startX: x, startY: y, liftProgress: 0,
+              movedDistance: 0, hoverRow: null, hoverCol: null, isValidHover: false,
+              previewRows: [], previewCols: []
+            };
+            try { canvas.setPointerCapture(e.pointerId); } catch {}
+            sound.playPickup();
+            updateDragHover();
+            return;
+          }
+        }
+
+        if (keyboardSlot !== null) {
+          const piece = tray[keyboardSlot];
+          if (piece && !piece.used) {
+            const cell = getGridCellAt(x, y, piece.matrix);
+            if (cell && canPlacePiece(grid, piece.matrix, cell.row, cell.col)) {
+              commitPlacement(piece, keyboardSlot, cell.row, cell.col);
+              keyboardSlot = null;
+            }
+          }
+        }
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        if (e.cancelable) e.preventDefault();
+        const { x, y } = toCanvasCoords(e.clientX, e.clientY);
+        drag.movedDistance = Math.max(drag.movedDistance, Math.hypot(x - drag.startX, y - drag.startY));
+        drag.pointerX = x;
+        drag.pointerY = y;
+        updateDragHover();
+      }, { passive: false });
+
+      function handlePointerEnd(e) {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const d = drag;
+        try { if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); } catch {}
+
+        if (d.isValidHover && d.hoverRow !== null && d.hoverCol !== null) {
+          drag = null;
+          commitPlacement(d.piece, d.slotIndex, d.hoverRow, d.hoverCol);
+          return;
+        }
+        if (d.movedDistance < 10) {
+          drag = null;
+          keyboardSlot = keyboardSlot === d.slotIndex ? null : d.slotIndex;
+          centerKeyboardCursorForPiece(d.piece);
+          return;
+        }
+        cancelDragWithSnapBack();
+      }
+
+      window.addEventListener('pointerup', handlePointerEnd);
+      window.addEventListener('pointercancel', handlePointerEnd);
+      window.addEventListener('blur', () => { if (drag) cancelDragWithSnapBack(); });
+
+      window.addEventListener('keydown', (e) => {
+        if (confirmRestartOpen) {
+          if (e.key === 'Escape') { confirmRestartOpen = false; syncUI(); }
+          else if (e.key === 'Enter') startNewGame();
+          return;
+        }
+        if (phase === 'TITLE_MENU') {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            if (hasSavedRun) continueSavedGame();
+            else startNewGame();
+          }
+          return;
+        }
+        if (phase === 'PAUSED') {
+          if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            resumeGame();
+          }
+          return;
+        }
+        if (phase === 'GAME_OVER') {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            startNewGame();
+          }
+          return;
+        }
+        if (phase !== 'PLAYING') return;
+
+        if (e.key === '1' || e.key === '2' || e.key === '3') {
+          const idx = Number(e.key) - 1;
+          const piece = tray[idx];
+          if (piece && !piece.used) {
+            sound.unlock();
+            keyboardSlot = idx;
+            centerKeyboardCursorForPiece(piece);
+            sound.playPickup();
+          }
+          return;
+        }
+        if (e.key === 'Escape') {
+          if (keyboardSlot !== null) { keyboardSlot = null; sound.playReturn(); }
+          else pauseGame();
+          return;
+        }
+        if (keyboardSlot === null) {
+          if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            const firstIdx = tray.findIndex((p) => p && !p.used);
+            if (firstIdx !== -1) {
+              keyboardSlot = firstIdx;
+              centerKeyboardCursorForPiece(tray[firstIdx]);
+            }
+          }
+          return;
+        }
+        const piece = tray[keyboardSlot];
+        if (!piece || piece.used) { keyboardSlot = null; return; }
+        const maxR = GRID_SIZE - piece.matrix.length;
+        const maxC = GRID_SIZE - piece.matrix[0].length;
+
+        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { e.preventDefault(); keyboardCursor.row = Math.max(0, keyboardCursor.row - 1); }
+        else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { e.preventDefault(); keyboardCursor.row = Math.min(maxR, keyboardCursor.row + 1); }
+        else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { e.preventDefault(); keyboardCursor.col = Math.max(0, keyboardCursor.col - 1); }
+        else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { e.preventDefault(); keyboardCursor.col = Math.min(maxC, keyboardCursor.col + 1); }
+        else if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          if (canPlacePiece(grid, piece.matrix, keyboardCursor.row, keyboardCursor.col)) {
+            commitPlacement(piece, keyboardSlot, keyboardCursor.row, keyboardCursor.col);
+            const nextIdx = tray.findIndex((p) => p && !p.used);
+            keyboardSlot = nextIdx !== -1 ? nextIdx : null;
+            if (keyboardSlot !== null && tray[keyboardSlot]) centerKeyboardCursorForPiece(tray[keyboardSlot]);
+          } else {
+            sound.playReturn();
+          }
+        }
+      });
+
+      muteBtn.addEventListener('click', toggleMute);
+      pauseMuteBtn.addEventListener('click', toggleMute);
+      pauseBtn.addEventListener('click', () => (phase === 'PAUSED' ? resumeGame() : pauseGame()));
+      resumeBtn.addEventListener('click', resumeGame);
+      restartBtn.addEventListener('click', () => { confirmRestartOpen = true; syncUI(); });
+      cancelRestartBtn.addEventListener('click', () => { confirmRestartOpen = false; syncUI(); });
+      confirmRestartBtn.addEventListener('click', startNewGame);
+      pauseRestartBtn.addEventListener('click', startNewGame);
+      startNewBtn.addEventListener('click', startNewGame);
+      continueBtn.addEventListener('click', continueSavedGame);
+      playAgainBtn.addEventListener('click', startNewGame);
+
+      if (typeof ResizeObserver !== 'undefined' && canvas.parentElement) {
+        new ResizeObserver(measure).observe(canvas.parentElement);
+      } else {
+        window.addEventListener('resize', measure);
+      }
+
+      loadFromStorage();
+      measure();
+      syncUI();
+
+      let lastTime = performance.now();
+      function loop(now) {
+        const dt = Math.min(Math.max((now - lastTime) / 1000, 0.001), 0.05);
+        lastTime = now;
+        update(dt);
+        render();
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>

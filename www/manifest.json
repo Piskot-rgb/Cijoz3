@@ -1,0 +1,19 @@
+{
+  "name": "Octo Pop",
+  "short_name": "Octo Pop",
+  "description": "Tactile 8x8 block puzzle game with spring physics, combo line clears, and synthesized audio.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1017",
+  "theme_color": "#0d1017",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
