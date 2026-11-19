@@ -1,0 +1,6 @@
+{
+  "appId": "com.octopop.game",
+  "appName": "Octo Pop",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}

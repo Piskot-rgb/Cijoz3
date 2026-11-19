@@ -1,0 +1,6 @@
+{
+  "name": "OctaPop",
+  "description": "Tactile 8x8 block puzzle game with spring physics, combo line clears, smart dealing, and synthesized Web Audio feedback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
